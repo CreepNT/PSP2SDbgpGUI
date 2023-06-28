@@ -35,12 +35,13 @@
             System.Windows.Forms.Label label4;
             System.Windows.Forms.TabPage kshowTabPage;
             System.Windows.Forms.TabPage processTabPage;
-            System.Windows.Forms.Button process_refreshPlistBtn;
-            System.Windows.Forms.Label label6;
-            System.Windows.Forms.Label label7;
             System.Windows.Forms.Label label8;
+            System.Windows.Forms.Label label7;
+            System.Windows.Forms.Label label6;
+            System.Windows.Forms.Button process_refreshPlistBtn;
             System.Windows.Forms.Label label9;
             System.Windows.Forms.Label label10;
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             this.logTextBox = new System.Windows.Forms.TextBox();
             this.targetPicker_menu = new System.Windows.Forms.ToolStripMenuItem();
             this.targetPicker_statusLabel = new System.Windows.Forms.ToolStripMenuItem();
@@ -49,6 +50,7 @@
             this.targetPicker_noTargetAvailableLabel = new System.Windows.Forms.ToolStripMenuItem();
             this.logToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.clearLogToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.saveToFileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.arbitraryTab_clearCmdBtn = new System.Windows.Forms.Button();
             this.arbitraryTab_sendCmdBtn = new System.Windows.Forms.Button();
             this.arbitraryTab_additionalBytesTextBox = new System.Windows.Forms.TextBox();
@@ -58,9 +60,17 @@
             this.arbitraryTab_cmdPreviewTextBox = new System.Windows.Forms.TextBox();
             this.kshowCmdListBox = new System.Windows.Forms.ListBox();
             this.kshowSendCmdBtn = new System.Windows.Forms.Button();
+            this.processControl_panel = new System.Windows.Forms.Panel();
+            this.processReadMemVATextBox = new System.Windows.Forms.TextBox();
+            this.processReadMemBtn = new System.Windows.Forms.Button();
+            this.processReadMemSizeUpDown = new System.Windows.Forms.NumericUpDown();
+            this.processKillBtn = new System.Windows.Forms.Button();
+            this.processResumeBtn = new System.Windows.Forms.Button();
+            this.processSuspendBtn = new System.Windows.Forms.Button();
             this.process_plistComboBox = new System.Windows.Forms.ComboBox();
             this.tabControl = new System.Windows.Forms.TabControl();
             this.phyAccessTab = new System.Windows.Forms.TabPage();
+            this.phymemReadBtn = new System.Windows.Forms.Button();
             this.phymemRW_target_PA_TextBox = new System.Windows.Forms.TextBox();
             this.phymemRW_written_value_UpDown = new System.Windows.Forms.NumericUpDown();
             this.phymemRW_write_Btn = new System.Windows.Forms.Button();
@@ -69,15 +79,6 @@
             this.phymemRW_size_32bits_radioBtn = new System.Windows.Forms.RadioButton();
             this.phymemRW_size_16bits_radioBtn = new System.Windows.Forms.RadioButton();
             this.customCmdTabPage = new System.Windows.Forms.TabPage();
-            this.processKillBtn = new System.Windows.Forms.Button();
-            this.processSuspendBtn = new System.Windows.Forms.Button();
-            this.processResumeBtn = new System.Windows.Forms.Button();
-            this.saveToFileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
-            this.processControl_panel = new System.Windows.Forms.Panel();
-            this.processReadMemSizeUpDown = new System.Windows.Forms.NumericUpDown();
-            this.processReadMemBtn = new System.Windows.Forms.Button();
-            this.processReadMemVATextBox = new System.Windows.Forms.TextBox();
-            this.phymemReadBtn = new System.Windows.Forms.Button();
             toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             toolStripSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             label2 = new System.Windows.Forms.Label();
@@ -90,10 +91,10 @@
             label4 = new System.Windows.Forms.Label();
             kshowTabPage = new System.Windows.Forms.TabPage();
             processTabPage = new System.Windows.Forms.TabPage();
-            process_refreshPlistBtn = new System.Windows.Forms.Button();
-            label6 = new System.Windows.Forms.Label();
-            label7 = new System.Windows.Forms.Label();
             label8 = new System.Windows.Forms.Label();
+            label7 = new System.Windows.Forms.Label();
+            label6 = new System.Windows.Forms.Label();
+            process_refreshPlistBtn = new System.Windows.Forms.Button();
             label9 = new System.Windows.Forms.Label();
             label10 = new System.Windows.Forms.Label();
             logGroupBox.SuspendLayout();
@@ -107,13 +108,13 @@
             ((System.ComponentModel.ISupportInitialize)(this.arbitraryTab_cmdIdUpDown)).BeginInit();
             kshowTabPage.SuspendLayout();
             processTabPage.SuspendLayout();
+            this.processControl_panel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.processReadMemSizeUpDown)).BeginInit();
             this.tabControl.SuspendLayout();
             this.phyAccessTab.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.phymemRW_written_value_UpDown)).BeginInit();
             this.phymemRW_size_groupBox.SuspendLayout();
             this.customCmdTabPage.SuspendLayout();
-            this.processControl_panel.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.processReadMemSizeUpDown)).BeginInit();
             this.SuspendLayout();
             // 
             // toolStripSeparator1
@@ -234,9 +235,16 @@
             // clearLogToolStripMenuItem
             // 
             this.clearLogToolStripMenuItem.Name = "clearLogToolStripMenuItem";
-            this.clearLogToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
+            this.clearLogToolStripMenuItem.Size = new System.Drawing.Size(140, 22);
             this.clearLogToolStripMenuItem.Text = "Clear log";
             this.clearLogToolStripMenuItem.Click += new System.EventHandler(this.clearLogToolStripMenuItem_Click);
+            // 
+            // saveToFileToolStripMenuItem
+            // 
+            this.saveToFileToolStripMenuItem.Name = "saveToFileToolStripMenuItem";
+            this.saveToFileToolStripMenuItem.Size = new System.Drawing.Size(140, 22);
+            this.saveToFileToolStripMenuItem.Text = "Save to file...";
+            this.saveToFileToolStripMenuItem.Click += new System.EventHandler(this.saveToFileToolStripMenuItem_Click);
             // 
             // label5
             // 
@@ -481,6 +489,120 @@
             processTabPage.Text = "Processes";
             processTabPage.UseVisualStyleBackColor = true;
             // 
+            // processControl_panel
+            // 
+            this.processControl_panel.Controls.Add(this.processReadMemVATextBox);
+            this.processControl_panel.Controls.Add(label8);
+            this.processControl_panel.Controls.Add(label7);
+            this.processControl_panel.Controls.Add(this.processReadMemBtn);
+            this.processControl_panel.Controls.Add(this.processReadMemSizeUpDown);
+            this.processControl_panel.Controls.Add(this.processKillBtn);
+            this.processControl_panel.Controls.Add(this.processResumeBtn);
+            this.processControl_panel.Controls.Add(this.processSuspendBtn);
+            this.processControl_panel.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.processControl_panel.Enabled = false;
+            this.processControl_panel.Location = new System.Drawing.Point(0, 40);
+            this.processControl_panel.Name = "processControl_panel";
+            this.processControl_panel.Size = new System.Drawing.Size(652, 273);
+            this.processControl_panel.TabIndex = 6;
+            // 
+            // processReadMemVATextBox
+            // 
+            this.processReadMemVATextBox.Location = new System.Drawing.Point(520, 16);
+            this.processReadMemVATextBox.Name = "processReadMemVATextBox";
+            this.processReadMemVATextBox.Size = new System.Drawing.Size(120, 20);
+            this.processReadMemVATextBox.TabIndex = 10;
+            // 
+            // label8
+            // 
+            label8.AutoSize = true;
+            label8.Location = new System.Drawing.Point(484, 45);
+            label8.Name = "label8";
+            label8.Size = new System.Drawing.Size(30, 13);
+            label8.TabIndex = 9;
+            label8.Text = "Size:";
+            // 
+            // label7
+            // 
+            label7.AutoSize = true;
+            label7.Location = new System.Drawing.Point(490, 19);
+            label7.Name = "label7";
+            label7.Size = new System.Drawing.Size(24, 13);
+            label7.TabIndex = 7;
+            label7.Text = "VA:";
+            // 
+            // processReadMemBtn
+            // 
+            this.processReadMemBtn.Location = new System.Drawing.Point(520, 69);
+            this.processReadMemBtn.Name = "processReadMemBtn";
+            this.processReadMemBtn.Size = new System.Drawing.Size(120, 23);
+            this.processReadMemBtn.TabIndex = 8;
+            this.processReadMemBtn.Text = "Read memory";
+            this.processReadMemBtn.UseVisualStyleBackColor = true;
+            this.processReadMemBtn.Click += new System.EventHandler(this.processReadMemBtn_Click);
+            // 
+            // processReadMemSizeUpDown
+            // 
+            this.processReadMemSizeUpDown.Hexadecimal = true;
+            this.processReadMemSizeUpDown.Location = new System.Drawing.Point(520, 43);
+            this.processReadMemSizeUpDown.Maximum = new decimal(new int[] {
+            65536,
+            0,
+            0,
+            0});
+            this.processReadMemSizeUpDown.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.processReadMemSizeUpDown.Name = "processReadMemSizeUpDown";
+            this.processReadMemSizeUpDown.Size = new System.Drawing.Size(120, 20);
+            this.processReadMemSizeUpDown.TabIndex = 7;
+            this.processReadMemSizeUpDown.Value = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            // 
+            // processKillBtn
+            // 
+            this.processKillBtn.Location = new System.Drawing.Point(18, 17);
+            this.processKillBtn.Name = "processKillBtn";
+            this.processKillBtn.Size = new System.Drawing.Size(75, 23);
+            this.processKillBtn.TabIndex = 3;
+            this.processKillBtn.Text = "Kill";
+            this.processKillBtn.UseVisualStyleBackColor = true;
+            this.processKillBtn.Click += new System.EventHandler(this.processControl_killBtn_Click);
+            // 
+            // processResumeBtn
+            // 
+            this.processResumeBtn.Location = new System.Drawing.Point(18, 74);
+            this.processResumeBtn.Name = "processResumeBtn";
+            this.processResumeBtn.Size = new System.Drawing.Size(75, 23);
+            this.processResumeBtn.TabIndex = 5;
+            this.processResumeBtn.Text = "Resume";
+            this.processResumeBtn.UseVisualStyleBackColor = true;
+            this.processResumeBtn.Click += new System.EventHandler(this.processControl_resumeBtn_Click);
+            // 
+            // processSuspendBtn
+            // 
+            this.processSuspendBtn.Location = new System.Drawing.Point(18, 45);
+            this.processSuspendBtn.Name = "processSuspendBtn";
+            this.processSuspendBtn.Size = new System.Drawing.Size(75, 23);
+            this.processSuspendBtn.TabIndex = 4;
+            this.processSuspendBtn.Text = "Suspend";
+            this.processSuspendBtn.UseVisualStyleBackColor = true;
+            this.processSuspendBtn.Click += new System.EventHandler(this.processControl_suspendBtn_Click);
+            // 
+            // label6
+            // 
+            label6.AutoSize = true;
+            label6.Location = new System.Drawing.Point(15, 16);
+            label6.Name = "label6";
+            label6.Size = new System.Drawing.Size(48, 13);
+            label6.TabIndex = 2;
+            label6.Text = "Process:";
+            // 
             // process_refreshPlistBtn
             // 
             process_refreshPlistBtn.Location = new System.Drawing.Point(565, 13);
@@ -500,6 +622,24 @@
             this.process_plistComboBox.Size = new System.Drawing.Size(490, 21);
             this.process_plistComboBox.TabIndex = 0;
             this.process_plistComboBox.SelectedIndexChanged += new System.EventHandler(this.processControl_plistComboBox_SelectedIndexChanged);
+            // 
+            // label9
+            // 
+            label9.AutoSize = true;
+            label9.Location = new System.Drawing.Point(199, 33);
+            label9.Name = "label9";
+            label9.Size = new System.Drawing.Size(24, 13);
+            label9.TabIndex = 7;
+            label9.Text = "PA:";
+            // 
+            // label10
+            // 
+            label10.AutoSize = true;
+            label10.Location = new System.Drawing.Point(140, 58);
+            label10.Name = "label10";
+            label10.Size = new System.Drawing.Size(83, 13);
+            label10.TabIndex = 8;
+            label10.Text = "Value (for write):";
             // 
             // tabControl
             // 
@@ -529,6 +669,16 @@
             this.phyAccessTab.TabIndex = 1;
             this.phyAccessTab.Text = "Phymem R/W";
             this.phyAccessTab.UseVisualStyleBackColor = true;
+            // 
+            // phymemReadBtn
+            // 
+            this.phymemReadBtn.Location = new System.Drawing.Point(244, 82);
+            this.phymemReadBtn.Name = "phymemReadBtn";
+            this.phymemReadBtn.Size = new System.Drawing.Size(75, 23);
+            this.phymemReadBtn.TabIndex = 9;
+            this.phymemReadBtn.Text = "Read";
+            this.phymemReadBtn.UseVisualStyleBackColor = true;
+            this.phymemReadBtn.Click += new System.EventHandler(this.phymemReadBtn_Click);
             // 
             // phymemRW_target_PA_TextBox
             // 
@@ -617,155 +767,6 @@
             this.customCmdTabPage.Text = "Custom command";
             this.customCmdTabPage.UseVisualStyleBackColor = true;
             // 
-            // label6
-            // 
-            label6.AutoSize = true;
-            label6.Location = new System.Drawing.Point(15, 16);
-            label6.Name = "label6";
-            label6.Size = new System.Drawing.Size(48, 13);
-            label6.TabIndex = 2;
-            label6.Text = "Process:";
-            // 
-            // processKillBtn
-            // 
-            this.processKillBtn.Location = new System.Drawing.Point(18, 17);
-            this.processKillBtn.Name = "processKillBtn";
-            this.processKillBtn.Size = new System.Drawing.Size(75, 23);
-            this.processKillBtn.TabIndex = 3;
-            this.processKillBtn.Text = "Kill";
-            this.processKillBtn.UseVisualStyleBackColor = true;
-            this.processKillBtn.Click += new System.EventHandler(this.processControl_killBtn_Click);
-            // 
-            // processSuspendBtn
-            // 
-            this.processSuspendBtn.Location = new System.Drawing.Point(18, 45);
-            this.processSuspendBtn.Name = "processSuspendBtn";
-            this.processSuspendBtn.Size = new System.Drawing.Size(75, 23);
-            this.processSuspendBtn.TabIndex = 4;
-            this.processSuspendBtn.Text = "Suspend";
-            this.processSuspendBtn.UseVisualStyleBackColor = true;
-            this.processSuspendBtn.Click += new System.EventHandler(this.processControl_suspendBtn_Click);
-            // 
-            // processResumeBtn
-            // 
-            this.processResumeBtn.Location = new System.Drawing.Point(18, 74);
-            this.processResumeBtn.Name = "processResumeBtn";
-            this.processResumeBtn.Size = new System.Drawing.Size(75, 23);
-            this.processResumeBtn.TabIndex = 5;
-            this.processResumeBtn.Text = "Resume";
-            this.processResumeBtn.UseVisualStyleBackColor = true;
-            this.processResumeBtn.Click += new System.EventHandler(this.processControl_resumeBtn_Click);
-            // 
-            // saveToFileToolStripMenuItem
-            // 
-            this.saveToFileToolStripMenuItem.Name = "saveToFileToolStripMenuItem";
-            this.saveToFileToolStripMenuItem.Size = new System.Drawing.Size(152, 22);
-            this.saveToFileToolStripMenuItem.Text = "Save to file...";
-            this.saveToFileToolStripMenuItem.Click += new System.EventHandler(this.saveToFileToolStripMenuItem_Click);
-            // 
-            // processControl_panel
-            // 
-            this.processControl_panel.Controls.Add(this.processReadMemVATextBox);
-            this.processControl_panel.Controls.Add(label8);
-            this.processControl_panel.Controls.Add(label7);
-            this.processControl_panel.Controls.Add(this.processReadMemBtn);
-            this.processControl_panel.Controls.Add(this.processReadMemSizeUpDown);
-            this.processControl_panel.Controls.Add(this.processKillBtn);
-            this.processControl_panel.Controls.Add(this.processResumeBtn);
-            this.processControl_panel.Controls.Add(this.processSuspendBtn);
-            this.processControl_panel.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.processControl_panel.Enabled = false;
-            this.processControl_panel.Location = new System.Drawing.Point(0, 40);
-            this.processControl_panel.Name = "processControl_panel";
-            this.processControl_panel.Size = new System.Drawing.Size(652, 273);
-            this.processControl_panel.TabIndex = 6;
-            // 
-            // processReadMemSizeUpDown
-            // 
-            this.processReadMemSizeUpDown.Hexadecimal = true;
-            this.processReadMemSizeUpDown.Location = new System.Drawing.Point(520, 43);
-            this.processReadMemSizeUpDown.Maximum = new decimal(new int[] {
-            65536,
-            0,
-            0,
-            0});
-            this.processReadMemSizeUpDown.Minimum = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            this.processReadMemSizeUpDown.Name = "processReadMemSizeUpDown";
-            this.processReadMemSizeUpDown.Size = new System.Drawing.Size(120, 20);
-            this.processReadMemSizeUpDown.TabIndex = 7;
-            this.processReadMemSizeUpDown.Value = new decimal(new int[] {
-            1,
-            0,
-            0,
-            0});
-            // 
-            // processReadMemBtn
-            // 
-            this.processReadMemBtn.Location = new System.Drawing.Point(520, 69);
-            this.processReadMemBtn.Name = "processReadMemBtn";
-            this.processReadMemBtn.Size = new System.Drawing.Size(120, 23);
-            this.processReadMemBtn.TabIndex = 8;
-            this.processReadMemBtn.Text = "Read memory";
-            this.processReadMemBtn.UseVisualStyleBackColor = true;
-            this.processReadMemBtn.Click += new System.EventHandler(this.processReadMemBtn_Click);
-            // 
-            // label7
-            // 
-            label7.AutoSize = true;
-            label7.Location = new System.Drawing.Point(490, 19);
-            label7.Name = "label7";
-            label7.Size = new System.Drawing.Size(24, 13);
-            label7.TabIndex = 7;
-            label7.Text = "VA:";
-            // 
-            // label8
-            // 
-            label8.AutoSize = true;
-            label8.Location = new System.Drawing.Point(484, 45);
-            label8.Name = "label8";
-            label8.Size = new System.Drawing.Size(30, 13);
-            label8.TabIndex = 9;
-            label8.Text = "Size:";
-            // 
-            // processReadMemVATextBox
-            // 
-            this.processReadMemVATextBox.Location = new System.Drawing.Point(520, 16);
-            this.processReadMemVATextBox.Name = "processReadMemVATextBox";
-            this.processReadMemVATextBox.Size = new System.Drawing.Size(120, 20);
-            this.processReadMemVATextBox.TabIndex = 10;
-            // 
-            // label9
-            // 
-            label9.AutoSize = true;
-            label9.Location = new System.Drawing.Point(199, 33);
-            label9.Name = "label9";
-            label9.Size = new System.Drawing.Size(24, 13);
-            label9.TabIndex = 7;
-            label9.Text = "PA:";
-            // 
-            // label10
-            // 
-            label10.AutoSize = true;
-            label10.Location = new System.Drawing.Point(140, 58);
-            label10.Name = "label10";
-            label10.Size = new System.Drawing.Size(83, 13);
-            label10.TabIndex = 8;
-            label10.Text = "Value (for write):";
-            // 
-            // phymemReadBtn
-            // 
-            this.phymemReadBtn.Location = new System.Drawing.Point(244, 82);
-            this.phymemReadBtn.Name = "phymemReadBtn";
-            this.phymemReadBtn.Size = new System.Drawing.Size(75, 23);
-            this.phymemReadBtn.TabIndex = 9;
-            this.phymemReadBtn.Text = "Read";
-            this.phymemReadBtn.UseVisualStyleBackColor = true;
-            this.phymemReadBtn.Click += new System.EventHandler(this.phymemReadBtn_Click);
-            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -775,6 +776,7 @@
             this.Controls.Add(this.tabControl);
             this.Controls.Add(mainMenuStrip);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MainMenuStrip = mainMenuStrip;
             this.MaximizeBox = false;
             this.Name = "MainForm";
@@ -797,6 +799,9 @@
             kshowTabPage.ResumeLayout(false);
             processTabPage.ResumeLayout(false);
             processTabPage.PerformLayout();
+            this.processControl_panel.ResumeLayout(false);
+            this.processControl_panel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.processReadMemSizeUpDown)).EndInit();
             this.tabControl.ResumeLayout(false);
             this.phyAccessTab.ResumeLayout(false);
             this.phyAccessTab.PerformLayout();
@@ -804,9 +809,6 @@
             this.phymemRW_size_groupBox.ResumeLayout(false);
             this.phymemRW_size_groupBox.PerformLayout();
             this.customCmdTabPage.ResumeLayout(false);
-            this.processControl_panel.ResumeLayout(false);
-            this.processControl_panel.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.processReadMemSizeUpDown)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 

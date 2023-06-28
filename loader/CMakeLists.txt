@@ -17,7 +17,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -fno-exceptions")
 enable_language(C ASM)
 
 add_executable(${PROJECT_NAME}
-  module.c
+  main.c
 )
 
 target_link_libraries(${PROJECT_NAME}
