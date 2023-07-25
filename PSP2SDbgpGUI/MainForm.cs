@@ -35,7 +35,26 @@ namespace PSP2SDbgpGUI {
                 Task.Run(() => { attachToSelectedTarget(); });
             }
 
-            arbitraryTab_regeneratePreview();
+            List<Tuple<string, eCommandGroup>> groups_list = new List<Tuple<string, eCommandGroup>>();
+            Action<string, eCommandGroup> addGrp = delegate (string s, eCommandGroup g) {
+                groups_list.Add(new Tuple<string, eCommandGroup>(s, g));
+            };
+
+            addGrp("System", eCommandGroup.SYSTEM_GROUP);
+            addGrp("Process", eCommandGroup.PROCESS_GROUP);
+            addGrp("Thread", eCommandGroup.THREAD_GROUP);
+            addGrp("Module", eCommandGroup.MODULE_GROUP);
+            addGrp("Unused (0x50)", eCommandGroup.group_0x50);
+            addGrp("File", eCommandGroup.FILE_GROUP);
+            addGrp("Network? (0x70)", eCommandGroup.network_group);
+            addGrp("System Debug? (0x90)", eCommandGroup.group_0x90);
+            addGrp("Miscellaneous", eCommandGroup.MISC_GROUP);
+
+            customCommandGroupComboBox.DataSource = groups_list;
+            customCommandGroupComboBox.DisplayMember = "Item1";
+            customCommandGroupComboBox.ValueMember = "Item2";
+            customCommandGroupComboBox.SelectedIndexChanged += customCommand_onChange_handler;
+            customCommand_regeneratePreview();
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
@@ -88,12 +107,68 @@ namespace PSP2SDbgpGUI {
             Invoke(a);
         }
 
+        private void fillInTargetInformation() {
+            ITarget tgt = getCurrentlySelectedTarget();
+            Func<uint, string> h2s = (uint val) => string.Format("0x{0:X}", val);
+
+            targetInformationTreeView.BeginUpdate();
+            TreeNodeCollection nodes = targetInformationTreeView.Nodes;
+            nodes.Clear();
+
+            //Query target informations via SDbgp protocol
+            Packet systemGetConfCmd = new Packet(0x14);
+            systemGetConfCmd.setCmdGroup(eCommandGroup.SYSTEM_GROUP);
+            systemGetConfCmd.setCmdType(0);
+            Packet sysConfPkt = sendQuietPacketAndReadAnswer(systemGetConfCmd);
+            uint confSize = sysConfPkt.getU32(0x1C);
+
+            //Version information
+            {
+                uint major, minor, build;
+                if (confSize >= 0x1C) {
+                    uint fwVersion = sysConfPkt.getU32(0x38);
+                    major = fwVersion >> 24 & 0xF;
+                    minor = (fwVersion >> 12) & 0xFFF;
+                    build = fwVersion & 0xFFF;
+
+                    nodes.Add(string.Format("Firmware Version: {0:X}.{1:X3}.{2:X3}", major, minor, build))
+                        .ToolTipText = "Version of the firmware hardcoded in deci4p_sdbgp.skprx";
+                    
+                }
+                tgt.FullSDKVersion(out major, out minor, out build);
+                nodes.Add(string.Format("SDK Version: {0:X}.{1:X3}.{2:X3}", major, minor, build))
+                    .ToolTipText = "Returned by TMAPI's ITarget.FullSDKVersion";
+            }
+
+            //ASLR information
+            if (confSize >= 0x28) {
+                uint ASLRSeed = sysConfPkt.getU32(0x40);
+                ASLR aslr = new ASLR(ASLRSeed);
+
+                TreeNode aslrRoot = nodes.Add("ASLR (Seed: " + h2s(ASLRSeed) + ")");
+                foreach (ASLR.Mapping map in aslr.mappings) {
+                    aslrRoot.Nodes.Add(map.ToString());
+                }
+            }
+
+            //Sysroot information
+            if (confSize >= 0x30) {
+                TreeNode sysrootRoot = nodes.Add("Sysroot");
+                sysrootRoot.Nodes.Add(string.Format("Virtual Address: 0x{0:X8}", sysConfPkt.getU32(0x44)));
+                sysrootRoot.Nodes.Add("Size (in bytes): " + h2s(sysConfPkt.getU32(0x48)));
+            }
+
+            targetInformationTreeView.EndUpdate();
+            targetInformationTreeView.ExpandAll();
+        }
+
         private void attachToSelectedTarget() {
             detachFromCurrentTarget();
             setNewLinkStatus(eLinkStatus.DISCONNECTED);
 
             //Prevent refresh or new attach while an operation is in progress
             targetPicker_refreshListBtn.Enabled = false;
+            
             foreach (ToolStripItem tsi in targetPicker_menu.DropDownItems) {
                 if (tsi.Tag != null)
                     tsi.Enabled = false;
@@ -102,7 +177,7 @@ namespace PSP2SDbgpGUI {
             ITarget target = getCurrentlySelectedTarget();
 
             if (!isTargetAvailable(target))
-                return;
+                goto cleanup;
 
             try {
                 if (target.PowerStatus != ePowerStatus.POWER_STATUS_ON) {
@@ -113,7 +188,7 @@ namespace PSP2SDbgpGUI {
                     target.Connect();
                 }
 
-                refreshTargetListMenu();
+                Invoke((Action)delegate { refreshTargetListMenu(); });
                 Invoke((Action)delegate { processControl_refreshProcessList(); });
 
                 setNewLinkStatus(eLinkStatus.CONNECTED_NO_PROTOCOL);
@@ -140,33 +215,34 @@ namespace PSP2SDbgpGUI {
                 goto cleanup;
             }
 
+            Invoke((Action)delegate { fillInTargetInformation(); });
+            
         cleanup:
             targetPicker_refreshListBtn.Enabled = true;
             foreach (ToolStripItem tsi in targetPicker_menu.DropDownItems) {
                 if (tsi.Tag != null)
                     tsi.Enabled = true;
             }
-            return;
         }
 
         private void detachFromCurrentTarget() {
             ITarget target = getCurrentlySelectedTarget();
-            if (target != null && m_targetStatus == eLinkStatus.CONNECTED_AND_LINKED) {
-                target.UnregisterCustomProtocol(Constants.SDBGP0_PROTOCOL, false);
-                target.UnregisterCustomProtocol(Constants.SDBGP1_PROTOCOL, false);
-                target.UnregisterCustomProtocol(Constants.SDBGP2_PROTOCOL, false);
-                target.UnregisterCustomProtocol(Constants.SDBGP3_PROTOCOL, false);
+            try {
+                if (target != null && m_targetStatus == eLinkStatus.CONNECTED_AND_LINKED) {
+                    target.UnregisterCustomProtocol(Constants.SDBGP0_PROTOCOL, false);
+                    target.UnregisterCustomProtocol(Constants.SDBGP1_PROTOCOL, false);
+                    target.UnregisterCustomProtocol(Constants.SDBGP2_PROTOCOL, false);
+                    target.UnregisterCustomProtocol(Constants.SDBGP3_PROTOCOL, false);
 
-                target.UnadviseCustomProtocol(m_packetMgr);
+                    target.UnadviseCustomProtocol(m_packetMgr);
+                }
+            } catch (COMException) {
+
             }
-
             setNewLinkStatus(eLinkStatus.DISCONNECTED);
         }
 
-        ///
-        /// Target picker code
-        ///
-
+        #region Target picker
         private static string getTargetButtonLabel(ITarget t) {
             string label = (t.Default) ? "★ " : "";
             label += t.Name;
@@ -251,7 +327,7 @@ namespace PSP2SDbgpGUI {
             if (bestNewSelection == null)
                 bestNewSelection = targets.DefaultTarget;
 
-            ToolStripMenuItem bnsTSMI = null;
+            ToolStripMenuItem bestNewSelectionTSMI = null;
 
             //Update all existing buttons (remove if necessary)
             foreach (ToolStripItem item in targetPicker_menu.DropDownItems) {
@@ -268,7 +344,7 @@ namespace PSP2SDbgpGUI {
                         tsmi.Text = getTargetButtonLabel(t);
 
                         if (t.HardwareId == bestNewSelection.HardwareId)
-                            bnsTSMI = tsmi;
+                            bestNewSelectionTSMI = tsmi;
 
                         if (tsmi.Checked)
                             selectedTargetStillAvailable = true;
@@ -284,7 +360,7 @@ namespace PSP2SDbgpGUI {
                 targetBtn.Tag = t;
 
                 if (t.HardwareId == bestNewSelection.HardwareId)
-                    bnsTSMI = targetBtn;
+                    bestNewSelectionTSMI = targetBtn;
 
                 targetPicker_menu.DropDownItems.Add(targetBtn);
             }
@@ -292,8 +368,8 @@ namespace PSP2SDbgpGUI {
             if (selectedTargetStillAvailable) {
                 return getCurrentlySelectedTarget();
             } else {
-                bnsTSMI.Enabled = false;
-                bnsTSMI.Checked = true;
+                bestNewSelectionTSMI.Enabled = false;
+                bestNewSelectionTSMI.Checked = true;
                 return bestNewSelection;
             }
         }
@@ -305,11 +381,9 @@ namespace PSP2SDbgpGUI {
         private void targetPicker_linkToSelectedBtn_Click(object sender, EventArgs e) {
             attachToSelectedTarget();
         }
+        #endregion
 
-        ///
-        /// Log management functions
-        ///
-
+        #region Log management
         private void clearLogToolStripMenuItem_Click(object sender, EventArgs e) {
             logTextBox.Text = "";
         }
@@ -334,6 +408,7 @@ namespace PSP2SDbgpGUI {
 
             sfd.Dispose();
         }
+        #endregion
 
         ///
         /// Helper/misc functions
@@ -352,18 +427,69 @@ namespace PSP2SDbgpGUI {
             m_packetMgr.sendPacket(p, getCurrentlySelectedTarget());
         }
 
+        private Packet sendPacketAndReadAnswer(Packet p) {
+            return m_packetMgr.sendPacketAndReadAnswer(p, getCurrentlySelectedTarget(), false);
+        }
+
+        private Packet sendQuietPacketAndReadAnswer(Packet p) {
+            return m_packetMgr.sendPacketAndReadAnswer(p, getCurrentlySelectedTarget());
+        }
+
+        //N.B. if bundleSize > 1, assumes data is big-endian
+        private void printDataPacket(string header, Packet pckt, int dataOffset, int bundleSize) {
+            if (pckt.getErrorCode() != eErrorCode.OK) {
+                log_println(pckt.ToString(true));
+            } else {               
+                byte[] data = pckt.raw;
+                int packetLen = data.Length;
+
+                Func<int, string> formatter;
+                switch(bundleSize) {
+                    case 1:
+                        formatter = delegate (int offset) { return string.Format("{0:X2} ", data[offset]); };
+                        break;
+                    case 2:
+                        formatter = delegate (int offset) {
+                            ushort val = (ushort)((data[offset + 1] << 8) | data[offset]);
+                            return string.Format("{0:X4} ", val);
+                        };
+                        break;
+                    case 4:
+                        formatter = delegate (int offset) {
+                            uint val = data[offset] | (uint)(data[offset + 1] << 8) |
+                                (uint)(data[offset + 2] << 16) | (uint)(data[offset + 3] << 24);
+                            return string.Format("{0:X8} ", val);
+                        };
+                        break;
+                    default:
+                        throw new ArgumentException("Invalid bundle size");
+                }
+                if (((packetLen - dataOffset) % bundleSize) != 0) {
+                    throw new ArgumentException("Packet data is not aligned to bundle size.");
+                }
+
+                log_println(string.Format("0x{0:X} -> {1:X2}:{2:X2} | {3}",
+                    packetLen, (byte)pckt.getCmdGroup(), pckt.getCmdType(), header));
+                string s = "";
+                for (int i = dataOffset; i < data.Length; i += bundleSize) {
+                    s += formatter(i);
+                }
+                log_println(s);
+            }
+        }
+
         ///
-        /// Commands
+        /// Tabs
         ///
 
-            /* kshow */
+        #region kshow
         private void kshowSendCmd(object sender, EventArgs e) {
             string selected = (string)kshowCmdListBox.SelectedItem;
             string hex = selected.Split(':')[0];
             uint kshow = Convert.ToUInt32(hex, 16);
 
             Packet pckt = new Packet(0x24);
-            pckt.setCommand(0xF0); pckt.setSubCommand(8);
+            pckt.setCmdGroup(0xF0); pckt.setCmdType(8);
             pckt.setU32(0x14, kshow);
 
             sendPacket(pckt);
@@ -372,11 +498,12 @@ namespace PSP2SDbgpGUI {
         private void kshowCmdListBox_SelectedIndexChanged(object sender, EventArgs e) {
             kshowSendCmdBtn.Enabled = true;
         }
+        #endregion
 
         #region Custom command
         private byte[] arbitraryTab_serializeAdditionalBytes() {
             try {
-                string commandBytes = arbitraryTab_additionalBytesTextBox.Text;
+                string commandBytes = customCommandAdditionalBytesTextBox.Text.ToUpper().Replace(" ", "");
                 byte[] res = new byte[commandBytes.Length / 2];
 
                 for (int i = 0; i < res.Length; i++) {
@@ -389,31 +516,27 @@ namespace PSP2SDbgpGUI {
             }
         }
 
-        private void arbitraryTab_regeneratePreview() {
+        private void customCommand_regeneratePreview() {
             byte[] addBytes = arbitraryTab_serializeAdditionalBytes();
             if (addBytes == null) {
-                arbitraryTab_cmdPreviewTextBox.Text = "Invalid command (check additional bytes)";
+                customCommandPreviewTextBox.Text = "Invalid command (check additional bytes)";
             } else {
-                uint packetSize = (uint)addBytes.Length + (Packet.MINIMAL_PACKET_SIZE - Packet.HDR_SIZE);
-                arbitraryTab_cmdPreviewTextBox.Text = string.Format("* Command size: 0x{0:X}/{0} bytes" + Environment.NewLine + Environment.NewLine, packetSize);
+                uint packetSize = (uint)addBytes.Length + Packet.MINIMAL_PACKET_SIZE;
+                customCommandPreviewTextBox.Text = string.Format("* Command size: 0x{0:X} bytes" + Environment.NewLine + Environment.NewLine, packetSize);
 
-                Packet pkt = new Packet(Packet.MINIMAL_PACKET_SIZE);
-                pkt.setCommand((byte)arbitraryTab_cmdIdUpDown.Value);
-                pkt.setSubCommand((byte)arbitraryTab_subCmdIdUpDown.Value);
-                pkt.setU8(Packet.UNK13_OFFSET, (byte)arbitraryTab_unk13UpDown.Value);
+                byte group = (byte)customCommandGroupComboBox.SelectedValue;
+                customCommandPreviewTextBox.AppendText(string.Format("00 {0:X2} {1:X2} {2:X2} ",
+                    group, (byte)customCommandTypeUpDown.Value, (byte)customCommandUnk13UpDown.Value));
 
-                foreach (byte b in pkt.raw) {
-                    arbitraryTab_cmdPreviewTextBox.AppendText(string.Format("{0:X2} ", b));
-                }
                 foreach (byte b in addBytes) {
-                    arbitraryTab_cmdPreviewTextBox.AppendText(string.Format("{0:X2} ", b));
+                    customCommandPreviewTextBox.AppendText(string.Format("{0:X2} ", b));
                 }
             }
             
         }
 
-        private void arbitraryTab_UpDown_ValueChanged(object sender, EventArgs e) {
-            arbitraryTab_regeneratePreview();
+        private void customCommand_onChange_handler(object sender, EventArgs e) {
+            customCommand_regeneratePreview();
         }
 
         private bool arbitraryTabIsLegalCharacter = false;
@@ -424,7 +547,7 @@ namespace PSP2SDbgpGUI {
                 arbitraryTabIsLegalCharacter = true;
             else if (Keys.NumPad0 <= e.KeyCode && e.KeyCode <= Keys.NumPad9)
                 arbitraryTabIsLegalCharacter = true;
-            else if (e.KeyCode == Keys.Back || e.KeyCode == Keys.Delete)
+            else if (e.KeyCode == Keys.Back || e.KeyCode == Keys.Delete || e.KeyCode == Keys.Space)
                 arbitraryTabIsLegalCharacter = true;
             else if (e.Control)
                 arbitraryTabIsLegalCharacter = true;
@@ -438,12 +561,11 @@ namespace PSP2SDbgpGUI {
         }
 
         private void arbitraryTab_additionalBytesTextBox_KeyUp(object sender, KeyEventArgs e) {
-            arbitraryTab_regeneratePreview();
+            customCommand_regeneratePreview();
         }
 
         private void arbitraryTab_additionalBytesTextBox_TextChanged(object sender, EventArgs e) {
-            TextBox self = (TextBox)sender;
-            self.Text = self.Text.Replace(" ", "");
+            customCommand_regeneratePreview();
         }
 
         private void arbitraryTab_sendCmdBtn_Click(object sender, EventArgs e) {
@@ -451,11 +573,11 @@ namespace PSP2SDbgpGUI {
             if (addbytes == null) {
                 return;
             }
-
+            
             Packet pckt = new Packet(Packet.MINIMAL_PACKET_SIZE + (uint)addbytes.Length);
-            pckt.setCommand((byte)arbitraryTab_cmdIdUpDown.Value);
-            pckt.setSubCommand((byte)arbitraryTab_subCmdIdUpDown.Value);
-            pckt.setU8(Packet.UNK13_OFFSET, (byte)arbitraryTab_unk13UpDown.Value);
+            pckt.setCmdGroup((eCommandGroup)customCommandGroupComboBox.SelectedValue);
+            pckt.setCmdType((byte)customCommandTypeUpDown.Value);
+            pckt.setU8(Packet.UNK13_OFFSET, (byte)customCommandUnk13UpDown.Value);
 
             uint offset = Packet.UNK13_OFFSET + 1;
             foreach (byte b in addbytes) {
@@ -465,55 +587,68 @@ namespace PSP2SDbgpGUI {
 
             sendPacket(pckt);
         }
-
-        private void arbitraryTab_clearCmdBtn_Click(object sender, EventArgs e) {
-            arbitraryTab_cmdIdUpDown.Value = 0;
-            arbitraryTab_subCmdIdUpDown.Value = 0;
-            arbitraryTab_unk13UpDown.Value = 0;
-            arbitraryTab_additionalBytesTextBox.Text = "";
-            arbitraryTab_regeneratePreview();
-        }
         #endregion
 
         #region Physical memory
-
         private uint phymemRW_accessSize_log2 = 0;
         private void phymemRW_size_radioBtn_Clicked(object sender, EventArgs e) {
             if (sender.Equals(phymemRW_size_8bits_radioBtn)) {
-                phymemRW_written_value_UpDown.Maximum = 255;
                 phymemRW_accessSize_log2 = 0;
             } else if (sender.Equals(phymemRW_size_16bits_radioBtn)) {
-                phymemRW_written_value_UpDown.Maximum = 0xFFFF;
                 phymemRW_accessSize_log2 = 1;
             } else if (sender.Equals(phymemRW_size_32bits_radioBtn)) {
-                phymemRW_written_value_UpDown.Maximum = 0xFFFFFFFF;
                 phymemRW_accessSize_log2 = 2;
             }
         }
 
         private void phymemReadBtn_Click(object sender, EventArgs e) {
-            uint targetPA = Convert.ToUInt32(phymemRW_target_PA_TextBox.Text, 16);
+            uint targetPA;
+            try {
+                targetPA = Convert.ToUInt32(phymemRW_target_PA_TextBox.Text, 16);
+            } catch {
+                MessageBox.Show("An invalid physical address has been specified.", "Invalid PA", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
+            uint accessSize = (uint)(1 << (int)phymemRW_accessSize_log2);
+            uint size = (uint)phymemRW_readSizeUpDown.Value & ~(accessSize - 1);
+            
             Packet pckt = new Packet(0x20);
-            pckt.setCommand(0x10);
-            pckt.setSubCommand(0x9A);
+            pckt.setCmdGroup(eCommandGroup.SYSTEM_GROUP);
+            pckt.setCmdType(0x98); //systemHwrdmemSysCmd
             pckt.setU32(0x14, targetPA);
-            pckt.setU32(0x18, (uint)(1 << (int)phymemRW_accessSize_log2));
+            pckt.setU32(0x18, size);
             pckt.setU32(0x1C, phymemRW_accessSize_log2);
 
-            sendPacket(pckt);
+            Packet reply = sendPacketAndReadAnswer(pckt);
+            string header = string.Format("Data at physical address {0:X8}: (0x{1:X} bytes)", targetPA, size);
+            printDataPacket(header, reply, 0x18, (int)accessSize);
         }
 
-        private void phymemRW_write_Btn_Click(object sender, EventArgs e) {
-            uint targetPA = Convert.ToUInt32(phymemRW_target_PA_TextBox.Text, 16);
+        private void phymemWriteBtn_Click(object sender, EventArgs e) {
+            uint targetPA;
+            try {
+                targetPA = Convert.ToUInt32(phymemRW_target_PA_TextBox.Text, 16);
+            } catch {
+                MessageBox.Show("An invalid physical address has been specified.", "Invalid PA", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            uint valueToWrite;
+            try {
+                valueToWrite = Convert.ToUInt32(phymemRW_writeDataTextBox.Text, 16);
+            } catch {
+                MessageBox.Show("Invalid data to write has been specified.", "Invalid data", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             Packet pckt = new Packet(0x20 + 4);
-            pckt.setCommand(0x10);
-            pckt.setSubCommand(0x9A);
+            pckt.setCmdGroup(eCommandGroup.SYSTEM_GROUP);
+            pckt.setCmdType(0x9A); //systemHwwrmemSysCmd
             pckt.setU32(0x14, targetPA);
             pckt.setU32(0x18, (uint)(1 << (int)phymemRW_accessSize_log2));
             pckt.setU32(0x1C, phymemRW_accessSize_log2);
-            pckt.setU32(0x20, (uint)phymemRW_written_value_UpDown.Value);
+            pckt.setU32(0x20, valueToWrite);
 
             sendPacket(pckt);
         }
@@ -561,18 +696,50 @@ namespace PSP2SDbgpGUI {
             }
         }
 
+        private void processControl_refreshThreadList() {
+            processControl_threadListComboBox.Items.Clear();
+
+            uint pid = processControl_getSelectedProcessId();
+            Packet query = new Packet(0x18);
+            query.setCmdGroup(eCommandGroup.THREAD_GROUP);
+            query.setCmdType(0);
+            query.setU32(0x14, pid);
+
+            Packet reply = sendQuietPacketAndReadAnswer(query);
+            //0x24 header + 0x10C * number of threads
+            //Offset 0x20 = number of threads
+            uint nThreads = reply.getU32(0x20);
+            for (uint i = 0; i < nThreads; i++) {
+                uint baseOffset = 0x24 + 0x10C * i;
+
+                uint thid = reply.getU32(baseOffset + 4);
+                string name = reply.getString(baseOffset + 0xC, 0x20);
+                processControl_threadListComboBox.Items.Add(string.Format("0x{0:X} - {1}", thid, name));
+            }
+        }
+
         private void processControl_refreshPlistBtn_Click(object sender, EventArgs e) {
             processControl_refreshProcessList();
+        }
+
+        private void process_refreshThreadListBtn_Click(object sender, EventArgs e) {
+            processControl_refreshThreadList();
         }
 
         private void processControl_plistComboBox_SelectedIndexChanged(object sender, EventArgs e) {
             processControl_panel.Enabled = true;
         }
 
+        private void processControl_panel_EnabledChanged(object sender, EventArgs e) {
+            if (((Panel)sender).Enabled) {
+                processControl_refreshThreadList();
+            }
+        }
+
         private void processControl_killBtn_Click(object sender, EventArgs e) {
             Packet pkt = new Packet(0x18);
-            pkt.setCommand(0x20);
-            pkt.setSubCommand(0x84);
+            pkt.setCmdGroup(eCommandGroup.PROCESS_GROUP);
+            pkt.setCmdType(0x84);
             pkt.setU32(0x14, processControl_getSelectedProcessId());
             sendPacket(pkt);
 
@@ -581,24 +748,24 @@ namespace PSP2SDbgpGUI {
 
         private void processControl_suspendBtn_Click(object sender, EventArgs e) {
             Packet pkt = new Packet(0x18);
-            pkt.setCommand(0x20);
-            pkt.setSubCommand(0x80);
+            pkt.setCmdGroup(0x20);
+            pkt.setCmdType(0x80);
             pkt.setU32(0x14, processControl_getSelectedProcessId());
             sendPacket(pkt);
         }
 
         private void processControl_resumeBtn_Click(object sender, EventArgs e) {
             Packet pkt = new Packet(0x18);
-            pkt.setCommand(0x20);
-            pkt.setSubCommand(0x82);
+            pkt.setCmdGroup(0x20);
+            pkt.setCmdType(0x82);
             pkt.setU32(0x14, processControl_getSelectedProcessId());
             sendPacket(pkt);
         }
 
         private void processReadMemBtn_Click(object sender, EventArgs e) {
             Packet pkt = new Packet(0x20);
-            pkt.setCommand(0x10);
-            pkt.setSubCommand(0x10);
+            pkt.setCmdGroup(0x10);
+            pkt.setCmdType(0x10);
             pkt.setU32(0x14, processControl_getSelectedProcessId());
             pkt.setU32(0x18, Convert.ToUInt32(processReadMemVATextBox.Text, 16));
             pkt.setU32(0x1C, (uint)processReadMemSizeUpDown.Value);
@@ -607,5 +774,27 @@ namespace PSP2SDbgpGUI {
         }
 
         #endregion
+
+        private void kernelMemReadBtn_Click(object sender, EventArgs e) {
+            uint readSize = (uint)kernelMemAccessSize.Value;
+            uint targetVA;
+            try {
+                targetVA = Convert.ToUInt32(kernelMemAccessVA.Text, 16);
+            } catch {
+                MessageBox.Show("An invalid virtual address has been specified.", "Invalid VA", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            
+            Packet pckt = new Packet(0x20);
+            pckt.setCmdGroup(eCommandGroup.SYSTEM_GROUP);
+            pckt.setCmdType(0x10); //systemRdmemCmd
+            pckt.setU32(0x14, 0x10005); //Kernel PID
+            pckt.setU32(0x18, targetVA);
+            pckt.setU32(0x1C, readSize);
+
+            Packet reply = sendPacketAndReadAnswer(pckt);
+            string header = string.Format("Data at virtual address {0:X8}: (0x{1:X} bytes)", targetVA, readSize);
+            printDataPacket(header, reply, 0x18, 1);
+        }
     }
 }

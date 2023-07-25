@@ -74,6 +74,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ASLR.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="MainForm.cs">
       <SubType>Form</SubType>
