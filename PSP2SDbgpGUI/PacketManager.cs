@@ -27,18 +27,26 @@ namespace PSP2SDbgpGUI {
         }
 
         //Could we do better?
-        private static Packet DUMMY = new Packet(Packet.MINIMAL_PACKET_SIZE);
-        private Packet answerPacket = DUMMY;
-        private AutoResetEvent waitEvent = new AutoResetEvent(false);
+        private byte answerType = 0;
+        private Packet answerPacket = null;
+        private AutoResetEvent requestEvent = new AutoResetEvent(false), waitEvent = new AutoResetEvent(false);
+
         public Packet sendPacketAndReadAnswer(Packet packet, ITarget target) {
             return sendPacketAndReadAnswer(packet, target, true);
         }
 
         public Packet sendPacketAndReadAnswer(Packet packet, ITarget target, bool quiet) {
-            System.Diagnostics.Debug.Assert(answerPacket != null);
-            answerPacket = null;
+            System.Diagnostics.Debug.Assert(requestEvent.WaitOne(0) == false);
+            answerType = (byte)(packet.getCmdType() + 1);
+            requestEvent.Set();
             sendPacket(packet, target, Constants.SDBGP0_PROTOCOL, quiet);
-            waitEvent.WaitOne();
+
+            //Ensure UI remains responsive by timing out
+            bool timedOut = !waitEvent.WaitOne(2500);
+            if (timedOut) {
+                requestEvent.WaitOne(0);
+                return null;
+            }
             return answerPacket;
         }
 
@@ -68,15 +76,15 @@ namespace PSP2SDbgpGUI {
         }
 
         public void OnErrorNoConnection(uint uProtocol, object Packet) {
-            log_println(String.Format("OnErrorNoConnection(0x{0:X8}, ...)", uProtocol));
+            log_println(string.Format("OnErrorNoConnection(0x{0:X8}, ...)", uProtocol));
         }
 
         public void OnErrorNoProtocol(uint uProtocol, object Packet) {
-            log_println(String.Format("OnErrorNoProtocol(0x{0:X8}, ...)", uProtocol));
+            log_println(string.Format("OnErrorNoProtocol(0x{0:X8}, ...)", uProtocol));
         }
 
         public void OnErrorNoSpace(uint uProtocol, object Packet) {
-            log_println(String.Format("OnErrorNoSpace(0x{0:X8}, ...)", uProtocol));
+            log_println(string.Format("OnErrorNoSpace(0x{0:X8}, ...)", uProtocol));
         }
 
         public void OnPacketReceived(uint uProtocol, object Packet, uint uFragmentSeq, uint uAttributes) {
@@ -89,8 +97,13 @@ namespace PSP2SDbgpGUI {
                 s += string.Format(" (Attr=0x{0:X}, FragSeq={1})", uAttributes, uFragmentSeq);
             }
 
-            if (answerPacket == null) {
-                //Don't log answer packets when app is asking to read the packet
+            if (received.isCrashPacket()) {
+                log_println(s + " - CPU " + (uProtocol - Constants.SDBGP0_PROTOCOL) + " is dead !");
+                return;
+            }
+
+            //Program asked to sniff the next reply and we have the correct type
+            if (received.getCmdType() == answerType && requestEvent.WaitOne(0) == true) {
                 answerPacket = received;
                 waitEvent.Set();
             } else {
@@ -157,11 +170,20 @@ namespace PSP2SDbgpGUI {
             raw = new byte[size - HDR_SIZE];
         }
 
+        public Packet(uint size, eCommandGroup grp, byte type) : this(size) {
+            setCmdGroup(grp);
+            setCmdType(type);
+        }
+
         public Packet(byte[] pckt) {
             raw = pckt;
         }
 
         public bool isReply() { return (getU8(ISREPLY_OFFSET) == 1); }
+        public bool isCrashPacket() {
+            return getCmdGroup() == eCommandGroup.SYSTEM_GROUP
+                && getCmdType() == 0xCA;
+        }
 
         public eCommandGroup getCmdGroup() { return (eCommandGroup)getU8(GROUP_OFFSET); }
         public void setCmdGroup(byte group) { setU8(GROUP_OFFSET, group); }

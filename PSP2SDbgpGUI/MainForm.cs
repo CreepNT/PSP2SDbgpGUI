@@ -58,7 +58,7 @@ namespace PSP2SDbgpGUI {
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
-            detachFromCurrentTarget();
+            //detachFromCurrentTarget();
         }
 
         ///
@@ -107,6 +107,11 @@ namespace PSP2SDbgpGUI {
             Invoke(a);
         }
 
+        private string formatFwVersion(uint ver) {
+            uint major = ver >> 24 & 0xF, minor = (ver >> 12) & 0xFFF, build = ver & 0xFFF;
+            return string.Format("{0:X}.{1:X3}.{2:X3}", major, minor, build);
+        }
+
         private void fillInTargetInformation() {
             ITarget tgt = getCurrentlySelectedTarget();
             Func<uint, string> h2s = (uint val) => string.Format("0x{0:X}", val);
@@ -126,13 +131,8 @@ namespace PSP2SDbgpGUI {
             {
                 uint major, minor, build;
                 if (confSize >= 0x1C) {
-                    uint fwVersion = sysConfPkt.getU32(0x38);
-                    major = fwVersion >> 24 & 0xF;
-                    minor = (fwVersion >> 12) & 0xFFF;
-                    build = fwVersion & 0xFFF;
-
-                    nodes.Add(string.Format("Firmware Version: {0:X}.{1:X3}.{2:X3}", major, minor, build))
-                        .ToolTipText = "Version of the firmware hardcoded in deci4p_sdbgp.skprx";
+                    nodes.Add("Firmware Version: " + formatFwVersion(sysConfPkt.getU32(0x38)))
+                        .ToolTipText = "Hardcoded in deci4p_sdbgp.skprx";
                     
                 }
                 tgt.FullSDKVersion(out major, out minor, out build);
@@ -149,6 +149,7 @@ namespace PSP2SDbgpGUI {
                 foreach (ASLR.Mapping map in aslr.mappings) {
                     aslrRoot.Nodes.Add(map.ToString());
                 }
+                aslrRoot.Expand();
             }
 
             //Sysroot information
@@ -158,8 +159,79 @@ namespace PSP2SDbgpGUI {
                 sysrootRoot.Nodes.Add("Size (in bytes): " + h2s(sysConfPkt.getU32(0x48)));
             }
 
+            //Kernel modules
+            TreeNode kmodRoot = nodes.Add("Kernel modules");
+
+            Packet moduleGetModuleInfoCmd = new Packet(0x18, eCommandGroup.MODULE_GROUP, 0);
+            moduleGetModuleInfoCmd.setU32(0x14, 0x10005); //PID => Kernel
+            Packet kmodInfo = sendQuietPacketAndReadAnswer(moduleGetModuleInfoCmd);
+            uint num_modules = kmodInfo.getU32(0x20);
+            uint offset = 0x24;
+            for (uint i = 0; i < num_modules; i++) {
+                uint this_size = kmodInfo.getU32(offset);
+                uint moduleId = kmodInfo.getU32(offset + 4);
+                uint sdkVersion = kmodInfo.getU32(offset + 8);
+                uint moduleVersion = kmodInfo.getU32(offset + 0xC);
+                byte unk10 = kmodInfo.getU8(offset + 0x10);
+                ushort flags = kmodInfo.getU16(offset + 0x12);
+                uint module_start = kmodInfo.getU32(offset + 0x14);
+                uint module_stop = kmodInfo.getU32(offset + 0x1C);
+                uint module_exit = kmodInfo.getU32(offset + 0x20);
+                string moduleName = kmodInfo.getString(offset + 0x24, 28);
+                uint state = kmodInfo.getU32(offset + 0x44);
+                uint fingerprint = kmodInfo.getU32(offset + 0x48);
+                uint num_segments = kmodInfo.getU32(offset + 0x4C);
+
+                TreeNode _modRoot = kmodRoot.Nodes.Add(moduleName + " (dbg_fingerprint: " + h2s(fingerprint) + ")");
+                _modRoot.Nodes.Add("GUID: " + h2s(moduleId));
+                _modRoot.Nodes.Add("SDK Version: " + formatFwVersion(sdkVersion));
+                _modRoot.Nodes.Add(string.Format("Module version: {0:X}.{1:X}", (moduleVersion >> 8) & 0xFF, moduleVersion & 0xFF)); //backwards?
+                _modRoot.Nodes.Add("UNK10: " + h2s(unk10));
+                _modRoot.Nodes.Add("Flags: " + h2s(flags)); //TODO: decode
+                _modRoot.Nodes.Add("module_start: " + h2s(module_start));
+                _modRoot.Nodes.Add("module_stop: " + h2s(module_stop));
+                _modRoot.Nodes.Add("module_exit: " + h2s(module_exit));
+                _modRoot.Nodes.Add("State: " + h2s(state));
+
+                uint exidx_offset = 0x50;
+                for (uint j = 0; j < num_segments; j++) {
+                    uint _segInfoSize = kmodInfo.getU32(offset + exidx_offset); //size of segment info = 0x14
+                    uint p_flags = kmodInfo.getU32(offset + exidx_offset + 4);
+                    uint seg_base = kmodInfo.getU32(offset + exidx_offset + 8);
+                    uint seg_sz = kmodInfo.getU32(offset + exidx_offset + 0xC);
+                    uint p_align = kmodInfo.getU32(offset + exidx_offset + 0x10);
+
+                    string rootName = "Segment " + j + ": " + h2s(seg_base) + "-" + h2s(seg_base + seg_sz - 1) + " (" + h2s(seg_sz) + " bytes)";
+                    TreeNode this_seg_root = _modRoot.Nodes.Add(rootName);
+
+                    string pretty_flags = "";
+                    if ((p_flags & 4) != 0)
+                        pretty_flags += "R";
+                    if ((p_flags & 2) != 0)
+                        pretty_flags += "W";
+                    if ((p_flags & 1) != 0)
+                        pretty_flags += "X";
+
+                    this_seg_root.Nodes.Add("Flags: " + h2s(p_flags) + " (" + pretty_flags + ")");
+                    this_seg_root.Nodes.Add("Alignment: " + h2s(p_align));
+                    this_seg_root.Expand();
+
+                    exidx_offset += _segInfoSize;
+                }
+
+                uint exidx_top = kmodInfo.getU32(offset + exidx_offset);
+                uint exidx_end = kmodInfo.getU32(offset + exidx_offset + 4);
+                uint extab_top = kmodInfo.getU32(offset + exidx_offset + 8);
+                uint extab_end = kmodInfo.getU32(offset + exidx_offset + 0xC);
+                _modRoot.Nodes.Add("exidx_top: " + h2s(exidx_top));
+                _modRoot.Nodes.Add("exidx_end: " + h2s(exidx_end));
+                _modRoot.Nodes.Add("extab_top: " + h2s(extab_top));
+                _modRoot.Nodes.Add("extab_end: " + h2s(extab_end));
+
+                offset += this_size;
+            }
+
             targetInformationTreeView.EndUpdate();
-            targetInformationTreeView.ExpandAll();
         }
 
         private void attachToSelectedTarget() {
@@ -437,6 +509,11 @@ namespace PSP2SDbgpGUI {
 
         //N.B. if bundleSize > 1, assumes data is big-endian
         private void printDataPacket(string header, Packet pckt, int dataOffset, int bundleSize) {
+            if (pckt == null) {
+                log_println("null packet");
+                return;
+            }
+
             if (pckt.getErrorCode() != eErrorCode.OK) {
                 log_println(pckt.ToString(true));
             } else {               
@@ -470,8 +547,10 @@ namespace PSP2SDbgpGUI {
 
                 log_println(string.Format("0x{0:X} -> {1:X2}:{2:X2} | {3}",
                     packetLen, (byte)pckt.getCmdGroup(), pckt.getCmdType(), header));
-                string s = "";
-                for (int i = dataOffset; i < data.Length; i += bundleSize) {
+                string s = formatter(dataOffset);
+                for (int i = dataOffset + bundleSize, ctr = bundleSize; i < data.Length; i += bundleSize, ctr += bundleSize) {
+                    if ((ctr % 0x10) == 0)
+                        s += Environment.NewLine;
                     s += formatter(i);
                 }
                 log_println(s);
@@ -621,7 +700,12 @@ namespace PSP2SDbgpGUI {
             pckt.setU32(0x1C, phymemRW_accessSize_log2);
 
             Packet reply = sendPacketAndReadAnswer(pckt);
-            string header = string.Format("Data at physical address {0:X8}: (0x{1:X} bytes)", targetPA, size);
+            if (reply == null) { //Target crashed
+                return;
+            }
+
+            string time = DateTime.Now.ToString("HH:mm:ss.fffffff");
+            string header = string.Format("Data at physical address {0:X8}: (0x{1:X} bytes) Time={2}", targetPA, size, time);
             printDataPacket(header, reply, 0x18, (int)accessSize);
         }
 
